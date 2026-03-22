@@ -3,12 +3,15 @@ import requests
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
 from groq import Groq
+from flask import Flask, request as freq
 
 TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
 GROQ_API_KEY = os.environ["GROQ_API_KEY"]
 SERPAPI_KEY = os.environ["SERPAPI_KEY"]
+PORT = int(os.environ.get("PORT", 8080))
 
 client = Groq(api_key=GROQ_API_KEY)
+flask_app = Flask(__name__)
 
 def search_web(query):
     try:
@@ -23,7 +26,7 @@ def search_web(query):
     except:
         return ""
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_message(update: Update, context):
     question = update.message.text
     await update.message.reply_text("Recherche en cours...")
     web = search_web(question)
@@ -35,4 +38,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-app.run_polling()
+
+@flask_app.route(f"/{TELEGRAM_TOKEN}", methods=["POST"])
+async def webhook():
+    await app.update_queue.put(Update.de_json(freq.json, app.bot))
+    return "OK"
+
+@flask_app.route("/")
+def index():
+    return "Bot actif!"
+
+if __name__ == "__main__":
+    flask_app.run(host="0.0.0.0", port=PORT)
